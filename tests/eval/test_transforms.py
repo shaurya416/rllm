@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+import json
+
+import pytest
+
 from rllm.data.transforms import (
+    _parse_python_function_call,
+    bfcl_transform,
     ceval_transform,
     countdown_transform,
     gpqa_diamond_transform,
@@ -274,3 +280,36 @@ class TestLiveCodeBenchTransform:
         }
         result = livecodebench_transform(row)
         assert isinstance(result["ground_truth"], list)
+
+
+class TestBFCLTransform:
+    def test_literal_arguments_are_parsed(self):
+        row = {"question": [], "function": [], "ground_truth": ["calc(n=20, k=-5, p=0.6, xs=[1, 2], name='a', flag=True)"]}
+        result = bfcl_transform(row)
+        assert json.loads(result["ground_truth"][0]) == {
+            "name": "calc",
+            "arguments": {"n": 20, "k": -5, "p": 0.6, "xs": [1, 2], "name": "a", "flag": True},
+        }
+
+    def test_ground_truth_is_never_executed(self, tmp_path):
+        marker = tmp_path / "executed"
+        gt = f"f(x=open({str(marker)!r}, 'w').write('x'))"
+        result = bfcl_transform({"ground_truth": [gt]})
+        assert not marker.exists()
+        assert result["ground_truth"] == [gt]
+
+    @pytest.mark.parametrize("gt", ["f(x=undefined_name)", "f(1, 2)", "f(**kw)", "f(x=1)(y=2)"])
+    def test_unparseable_arguments_are_not_turned_into_no_arguments(self, gt):
+        # An empty argument dict makes the grader accept any call with the right name.
+        assert _parse_python_function_call(gt) is None
+
+    def test_unparseable_ground_truth_does_not_grade_wrong_arguments_correct(self):
+        from rllm.eval.evaluator_loader import load_evaluator
+        from rllm.types import Episode
+
+        row = bfcl_transform({"ground_truth": ["get_weather(city=undefined_name)"]})
+        evaluator = load_evaluator("bfcl_reward_fn")
+        ep = Episode(artifacts={"answer": "", "tool_calls": [{"name": "get_weather", "arguments": {"city": "WRONG"}}]})
+        result = evaluator.evaluate({"ground_truth": row["ground_truth"]}, ep)
+        assert result.is_correct is False
+        assert result.reward == 0.0

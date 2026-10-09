@@ -71,6 +71,8 @@ def _verify_keywords_existence(response: str, keywords: list[str], **kwargs) -> 
 
 def _verify_keywords_frequency(response: str, keyword: str, frequency: int, relation: str = "at least", **kwargs) -> bool:
     count = response.lower().count(keyword.lower())
+    if relation == "less than":
+        return count < frequency
     if relation == "at least":
         return count >= frequency
     if relation == "at most":
@@ -87,6 +89,8 @@ def _verify_keywords_forbidden(response: str, forbidden_words: list[str], **kwar
 
 def _verify_keywords_letter_frequency(response: str, letter: str, let_frequency: int, let_relation: str = "at least", **kwargs) -> bool:
     count = response.lower().count(letter.lower())
+    if let_relation == "less than":
+        return count < let_frequency
     if let_relation == "at least":
         return count >= let_frequency
     if let_relation == "at most":
@@ -98,6 +102,8 @@ def _verify_keywords_letter_frequency(response: str, letter: str, let_frequency:
 
 def _verify_length_number_words(response: str, num_words: int, relation: str = "at least", **kwargs) -> bool:
     count = len(response.split())
+    if relation == "less than":
+        return count < num_words
     if relation == "at least":
         return count >= num_words
     if relation == "at most":
@@ -110,6 +116,8 @@ def _verify_length_number_words(response: str, num_words: int, relation: str = "
 def _verify_length_number_sentences(response: str, num_sentences: int, relation: str = "at least", **kwargs) -> bool:
     sentences = [s.strip() for s in re.split(r"[.!?]+", response.strip()) if s.strip()]
     count = len(sentences)
+    if relation == "less than":
+        return count < num_sentences
     if relation == "at least":
         return count >= num_sentences
     if relation == "at most":
@@ -236,6 +244,10 @@ _INSTRUCTION_VERIFIERS: dict[str, Any] = {
 
 
 def _verify_instruction(instruction_id: str, response: str, kwargs: dict) -> bool:
+    # An empty response follows no instruction, as in the official checker;
+    # otherwise "absence" checks (no_comma, forbidden_words, ...) pass on nothing.
+    if not response.strip():
+        return False
     verifier = _INSTRUCTION_VERIFIERS.get(instruction_id)
     if verifier is None:
         return True  # Unknown instruction → lenient pass

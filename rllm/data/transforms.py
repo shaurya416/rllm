@@ -396,7 +396,9 @@ def multichallenge_transform(row: dict) -> dict:
 def _parse_python_function_call(call_str: str) -> dict | None:
     """Parse a Python-style function call string into {name, arguments} dict.
 
-    Handles strings like: ``func_name(arg1=val1, arg2=val2)``
+    Handles strings like: ``func_name(arg1=val1, arg2=val2)``. Argument values
+    must be Python literals; the string is never executed. Returns ``None`` when
+    it is not a keyword-argument call with literal values.
     """
     match = re.match(r"^(\w[\w.]*)(\(.*\))$", call_str.strip(), re.DOTALL)
     if not match:
@@ -404,12 +406,16 @@ def _parse_python_function_call(call_str: str) -> dict | None:
     name = match.group(1)
     args_str = match.group(2)
     try:
-        # Use ast.literal_eval on a dict representation of kwargs
-        # Build "dict(arg1=val1, arg2=val2)" → evaluate as Python dict
-        node = ast.parse(f"dict{args_str}", mode="eval")
-        arguments = eval(compile(node, "<string>", "eval"))
+        # Parse "dict(arg1=val1, arg2=val2)" and read each keyword value with
+        # ast.literal_eval, so dataset strings are never executed.
+        call = ast.parse(f"dict{args_str}", mode="eval").body
+        if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Name) and call.func.id == "dict"):
+            return None
+        if call.args or any(kw.arg is None for kw in call.keywords):
+            return None
+        arguments = {kw.arg: ast.literal_eval(kw.value) for kw in call.keywords}
     except Exception:
-        arguments = {}
+        return None
     return {"name": name, "arguments": arguments}
 
 

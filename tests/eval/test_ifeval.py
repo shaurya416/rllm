@@ -196,6 +196,27 @@ class TestVerifyInstruction:
             is True
         )
 
+    # IFEval's own comparison relations are "less than" and "at least".
+    @pytest.mark.parametrize(
+        ("instruction_id", "response", "kwargs"),
+        [
+            ("length_constraints:number_words", "one two three", {"num_words": 50, "relation": "less than"}),
+            ("length_constraints:number_sentences", "One. Two.", {"num_sentences": 3, "relation": "less than"}),
+            ("keywords:frequency", "no felines here", {"keyword": "cat", "frequency": 2, "relation": "less than"}),
+            ("keywords:letter_frequency", "abc", {"letter": "z", "let_frequency": 5, "let_relation": "less than"}),
+        ],
+    )
+    def test_less_than_relation_can_be_satisfied(self, instruction_id, response, kwargs):
+        assert verify_instruction(instruction_id, response, kwargs) is True
+
+    def test_less_than_relation_is_strict(self):
+        assert verify_instruction("length_constraints:number_words", "one two three", {"num_words": 3, "relation": "less than"}) is False
+
+    @pytest.mark.parametrize("response", ["", "  \n"])
+    def test_empty_response_follows_no_instruction(self, response):
+        assert verify_instruction("punctuation:no_comma", response, {}) is False
+        assert verify_instruction("keywords:forbidden_words", response, {"forbidden_words": ["bad"]}) is False
+
 
 # ---------------------------------------------------------------------------
 # ifeval_reward_fn (loaded via the registry adapter)
@@ -228,6 +249,19 @@ class TestIFEvalEvaluator:
         # Loose accuracy should be 0.5 (1 of 2 passed)
         loose = next(s for s in result.signals if s.name == "loose_accuracy")
         assert loose.value == pytest.approx(0.5)
+
+    @pytest.mark.parametrize("episode", [Episode(artifacts={"answer": ""}), Episode()])
+    def test_empty_response_is_not_correct(self, episode):
+        evaluator = load_evaluator("ifeval_reward_fn")
+        task = {
+            "instruction_id_list": ["punctuation:no_comma", "keywords:forbidden_words", "change_case:english_lowercase"],
+            "kwargs": [{}, {"forbidden_words": ["bad"]}, {}],
+        }
+        result = evaluator.evaluate(task, episode)
+        assert result.is_correct is False
+        assert result.reward == 0.0
+        loose = next(s for s in result.signals if s.name == "loose_accuracy")
+        assert loose.value == 0.0
 
     def test_no_instructions(self):
         evaluator = load_evaluator("ifeval_reward_fn")
