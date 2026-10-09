@@ -46,10 +46,14 @@ def validate_equation(equation_str, available_numbers):
 def evaluate_equation(equation_str):
     """Safely evaluate the arithmetic equation using eval() with precautions."""
     try:
-        # Define a regex pattern that only allows numbers, operators, parentheses, and whitespace
-        allowed_pattern = r"^[\d+\-*/().\s]+$"
+        # Define a regex pattern that only allows integers, operators, parentheses, and whitespace.
+        # A decimal point would let digits of two given numbers be joined into a new one (1, 5 -> 1.5).
+        allowed_pattern = r"^[\d+\-*/()\s]+$"
         if not re.match(allowed_pattern, equation_str):
             raise ValueError("Invalid characters in equation.")
+        # Only +, -, *, / are allowed: reject ** (also unbounded work, e.g. 9**9**9) and //
+        if "**" in equation_str or "//" in equation_str:
+            raise ValueError("Invalid operator in equation.")
 
         # Evaluate the equation with restricted globals and locals
         result = eval(equation_str, {"__builtins__": None}, {})

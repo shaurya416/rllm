@@ -239,7 +239,8 @@ class QwenToolParser(ToolParser):
                 call_data = json.loads(json_content)
                 # Convert to common format matching parse_tool_calls output
                 tool_calls.append({"name": call_data["name"], "arguments": call_data["arguments"]})
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, KeyError, TypeError):
+                # Invalid JSON, or valid JSON that is not a {"name", "arguments"} object
                 print(f"Error parsing tool call: {json_content}")
                 text = text[end + len(self.tool_call_end) :]
                 continue

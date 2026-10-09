@@ -101,12 +101,14 @@ def calculate_reinforce_plus_plus_baseline_advantages(rewards: list[np.ndarray],
 
     centered_rewards_by_group: list[np.ndarray] = []
     for group_rewards in rewards:
-        centered_rewards_by_group.append(group_rewards - np.mean(group_rewards))
+        baseline = np.mean(group_rewards) if len(group_rewards) > 1 else 0.0
+        centered_rewards_by_group.append(group_rewards - baseline)
 
     all_centered_rewards = np.concatenate(centered_rewards_by_group)
+    batch_mean = np.mean(all_centered_rewards)
     batch_std = np.std(all_centered_rewards)
 
-    advantages_by_group = [centered_rewards / (batch_std + epsilon) for centered_rewards in centered_rewards_by_group]
+    advantages_by_group = [(centered_rewards - batch_mean) / (batch_std + epsilon) for centered_rewards in centered_rewards_by_group]
 
     return advantages_by_group, advantages_by_group
 

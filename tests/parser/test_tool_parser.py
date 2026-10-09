@@ -58,6 +58,27 @@ class TestQwenToolParser:
         result = parser.parse(response)
         assert len(result) == 0
 
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            '{"name": "search_weather", "parameters": {"location": "New York"}}',
+            '{"arguments": {"location": "New York"}}',
+            '["search_weather", {"location": "New York"}]',
+            '"search_weather"',
+            "null",
+        ],
+    )
+    def test_well_formed_json_with_wrong_shape_is_skipped(self, parser, payload):
+        """A tool call whose JSON is valid but not a {name, arguments} object is skipped like invalid JSON."""
+        response = f"""
+        <tool_call>{payload}</tool_call>
+        <tool_call>{{"name": "search_restaurants", "arguments": {{"cuisine": "Italian"}}}}</tool_call>
+        """
+        result = parser.parse(response)
+        assert len(result) == 1
+        assert result[0].name == "search_restaurants"
+        assert result[0].arguments == {"cuisine": "Italian"}
+
     def test_get_tool_prompt(self, parser):
         """Test tool prompt generation."""
         tools_schema = """

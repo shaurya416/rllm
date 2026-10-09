@@ -78,10 +78,10 @@ rllm:
 |---|---|---|
 | `GRPO` | `grpo` | Per-group reward centering; optional std normalization (`norm_adv_by_std_in_grpo`) |
 | `REINFORCE` | `reinforce` | No baseline (`adv = reward`) |
-| `REINFORCE_PLUS_PLUS_BASELINE` | `reinforce_plus_plus_baseline` | Per-group centering, then role-batch std normalization |
+| `REINFORCE_PLUS_PLUS_BASELINE` | `reinforce_plus_plus_baseline` | Per-group centering (baseline 0 for a single-trajectory group), then role-batch whitening |
 | `RLOO` | `rloo` | Leave-one-out baseline per group |
 
-For `REINFORCE++ baseline`, normalization uses batch-level statistics across all centered rewards in the role.
+For `REINFORCE++ baseline`, whitening (subtract mean, divide by std) uses batch-level statistics across all centered rewards in the role.
 
 ## What rLLM supports today
 
