@@ -59,8 +59,9 @@ def _parse_function_call(call_str: str) -> list[dict]:
 
 
 def _compare_function_calls(model_calls: list[dict], ground_truth_calls: list) -> tuple[bool, dict]:
+    # No expected call (e.g. an irrelevance item): correct only if the model made none.
     if not ground_truth_calls:
-        return True, {"reason": "no_ground_truth"}
+        return not model_calls, {"reason": "no_ground_truth", "model_calls": len(model_calls)}
     if not model_calls:
         return False, {"reason": "no_model_calls"}
 
@@ -81,8 +82,7 @@ def _compare_function_calls(model_calls: list[dict], ground_truth_calls: list) -
     if not gt_calls:
         return False, {"reason": "could_not_parse_ground_truth"}
 
-    matched = 0
-    total = len(gt_calls)
+    expected = []
     for gt_call in gt_calls:
         gt_name = gt_call.get("name", "")
         gt_args = gt_call.get("arguments", {})
@@ -91,27 +91,44 @@ def _compare_function_calls(model_calls: list[dict], ground_truth_calls: list) -
                 gt_args = json.loads(gt_args)
             except (json.JSONDecodeError, ValueError):
                 gt_args = {}
+        expected.append((gt_name, gt_args))
 
-        for model_call in model_calls:
-            model_name = model_call.get("name", "")
-            model_args = model_call.get("arguments", {})
-            if isinstance(model_args, str):
-                try:
-                    model_args = json.loads(model_args)
-                except (json.JSONDecodeError, ValueError):
-                    model_args = {}
+    made = []
+    for model_call in model_calls:
+        if not isinstance(model_call, dict):
+            made.append(None)  # not a call; it still counts toward the number of calls
+            continue
+        model_args = model_call.get("arguments", {})
+        if isinstance(model_args, str):
+            try:
+                model_args = json.loads(model_args)
+            except (json.JSONDecodeError, ValueError):
+                model_args = {}
+        made.append((model_call.get("name", ""), model_args))
 
-            if model_name == gt_name:
-                if _normalize_arg_value(model_args) == _normalize_arg_value(gt_args):
-                    matched += 1
-                    break
-                elif not gt_args:
-                    matched += 1
-                    break
+    # Each model call can satisfy at most one ground-truth call. Calls with
+    # arguments are matched first, because one without arguments accepts any.
+    used: set[int] = set()
+    matched = 0
+    for gt_name, gt_args in sorted(expected, key=lambda call: not call[1]):
+        for i, call in enumerate(made):
+            if i in used or call is None:
+                continue
+            model_name, model_args = call
+            if model_name == gt_name and (not gt_args or _normalize_arg_value(model_args) == _normalize_arg_value(gt_args)):
+                used.add(i)
+                matched += 1
+                break
 
-    is_correct = matched == total
-    return is_correct, {
+    total = len(expected)
+    # As in BFCL, the number of calls must match too, so extra guesses are not free.
+    is_correct = matched == total and len(made) == total
+    details = {
         "matched": matched,
         "total": total,
-        "accuracy": matched / total if total > 0 else 0.0,
+        "model_calls": len(made),
+        "accuracy": matched / max(total, len(made)),
     }
+    if len(made) != total:
+        details["reason"] = "wrong_number_of_calls"
+    return is_correct, details

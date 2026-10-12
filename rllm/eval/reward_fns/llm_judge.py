@@ -49,13 +49,7 @@ def evaluate(task: Task, episode: Episode) -> EvalOutput:
         conv_text = f"USER: {question}\nASSISTANT: {answer}"
 
     if not rubric:
-        is_correct = len(answer.strip()) > 0
-        return EvalOutput(
-            reward=1.0 if is_correct else 0.0,
-            is_correct=is_correct,
-            signals=[Signal(name="judge_score", value=1.0 if is_correct else 0.0)],
-            metadata={"reason": "no_rubric_available"},
-        )
+        return _ungraded("no_rubric_available")
 
     judge_model = task.metadata.get("judge_model")
     judge_base_url = task.metadata.get("judge_base_url")
@@ -69,13 +63,18 @@ def evaluate(task: Task, episode: Episode) -> EvalOutput:
             signals=[Signal(name="judge_score", value=float(score))],
         )
 
-    # Fallback: judge unavailable, accept any non-empty answer
-    is_correct = len(answer.strip()) > 0
+    # Judge unavailable or gave no verdict: an unjudged answer is not a correct one.
+    return _ungraded("judge_unavailable_fallback")
+
+
+def _ungraded(reason: str) -> EvalOutput:
+    """Score 0 with an ``ungraded`` flag, so a missing rubric or judge surfaces
+    in the results instead of passing every non-empty answer."""
     return EvalOutput(
-        reward=1.0 if is_correct else 0.0,
-        is_correct=is_correct,
-        signals=[Signal(name="judge_score", value=1.0 if is_correct else 0.0)],
-        metadata={"reason": "judge_unavailable_fallback"},
+        reward=0.0,
+        is_correct=False,
+        signals=[Signal(name="judge_score", value=0.0)],
+        metadata={"reason": reason, "ungraded": True},
     )
 
 

@@ -217,6 +217,46 @@ class TestVerifyInstruction:
         assert verify_instruction("punctuation:no_comma", response, {}) is False
         assert verify_instruction("keywords:forbidden_words", response, {"forbidden_words": ["bad"]}) is False
 
+    # "Your entire response should be in English, and in all capital letters."
+    def test_english_capital_requires_all_capital_letters(self):
+        assert verify_instruction("change_case:english_capital", "Hello World", {}) is False
+        assert verify_instruction("change_case:english_capital", "HELLO WORLD 123", {}) is True
+
+    # Official IFEval instruction IDs must be checked, not passed as unknown.
+    @pytest.mark.parametrize(
+        ("instruction_id", "failing", "passing", "kwargs"),
+        [
+            ("startend:quotation", "Hello there", '"Hello there"', {}),
+            (
+                "change_case:capital_word_frequency",
+                "This is VERY important",
+                "THIS is VERY important",
+                {"capital_frequency": 2, "capital_relation": "at least"},
+            ),
+            (
+                "change_case:capital_word_frequency",
+                "THIS is VERY IMPORTANT",
+                "This is VERY important",
+                {"capital_frequency": 2, "capital_relation": "less than"},
+            ),
+            (
+                "length_constraints:nth_paragraph_first_word",
+                "Alpha one.\n\nGamma two.",
+                "Alpha one.\n\nBeta, two.",
+                {"num_paragraphs": 2, "nth_paragraph": 2, "first_word": "beta"},
+            ),
+            (
+                "length_constraints:nth_paragraph_first_word",
+                "Alpha one.\n\nBeta two.\n\nGamma three.",
+                "Alpha one.\n\nBeta two.",
+                {"num_paragraphs": 2, "nth_paragraph": 2, "first_word": "beta"},
+            ),
+        ],
+    )
+    def test_official_instruction_is_verified(self, instruction_id, failing, passing, kwargs):
+        assert verify_instruction(instruction_id, failing, kwargs) is False
+        assert verify_instruction(instruction_id, passing, kwargs) is True
+
 
 # ---------------------------------------------------------------------------
 # ifeval_reward_fn (loaded via the registry adapter)

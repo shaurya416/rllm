@@ -187,7 +187,45 @@ def _verify_change_case_english_uppercase(response: str, **kwargs) -> bool:
 
 
 def _verify_change_case_english_capital(response: str, **kwargs) -> bool:
-    return all(w[0].isupper() for w in response.split() if w and w[0].isalpha())
+    # "Your entire response should be in English, and in all capital letters."
+    return response.isupper()
+
+
+def _verify_change_case_capital_word_frequency(response: str, capital_frequency: int, capital_relation: str = "at least", **kwargs) -> bool:
+    # Hyphenated words and abbreviations such as "U.S." count as one word, as with the reference tokenizer.
+    count = sum(1 for w in re.findall(r"\w+(?:[-.]\w+)*", response) if w.isupper())
+    if capital_relation == "less than":
+        return count < capital_frequency
+    if capital_relation == "at least":
+        return count >= capital_frequency
+    if capital_relation == "at most":
+        return count <= capital_frequency
+    if capital_relation == "exactly":
+        return count == capital_frequency
+    return False
+
+
+def _verify_length_nth_paragraph_first_word(response: str, num_paragraphs: int, nth_paragraph: int, first_word: str, **kwargs) -> bool:
+    paragraphs = re.split(r"\n\n", response)
+    count = sum(1 for p in paragraphs if p.strip())
+    nth = int(nth_paragraph)
+    if not 1 <= nth <= count:
+        return False
+    paragraph = paragraphs[nth - 1].strip()
+    if not paragraph:
+        return False
+    word = paragraph.split()[0].strip().lstrip("'").lstrip('"')
+    found = ""
+    for letter in word:
+        if letter in {".", ",", "?", "!", "'", '"'}:
+            break
+        found += letter.lower()
+    return count == num_paragraphs and found == first_word.lower()
+
+
+def _verify_startend_quotation(response: str, **kwargs) -> bool:
+    value = response.strip()
+    return len(value) > 1 and value[0] == '"' and value[-1] == '"'
 
 
 def _verify_startend_end_checker(response: str, end_phrase: str, **kwargs) -> bool:
@@ -224,6 +262,7 @@ _INSTRUCTION_VERIFIERS: dict[str, Any] = {
     "length_constraints:number_words": _verify_length_number_words,
     "length_constraints:number_sentences": _verify_length_number_sentences,
     "length_constraints:number_paragraphs": _verify_length_number_paragraphs,
+    "length_constraints:nth_paragraph_first_word": _verify_length_nth_paragraph_first_word,
     "detectable_format:number_bullet_lists": _verify_detectable_format_number_bullet_lists,
     "detectable_format:number_highlighted_sections": _verify_detectable_format_number_highlighted_sections,
     "detectable_format:title": _verify_detectable_format_title,
@@ -235,7 +274,9 @@ _INSTRUCTION_VERIFIERS: dict[str, Any] = {
     "change_case:english_lowercase": _verify_change_case_english_lowercase,
     "change_case:english_uppercase": _verify_change_case_english_uppercase,
     "change_case:english_capital": _verify_change_case_english_capital,
+    "change_case:capital_word_frequency": _verify_change_case_capital_word_frequency,
     "startend:end_checker": _verify_startend_end_checker,
+    "startend:quotation": _verify_startend_quotation,
     "combination:two_responses": _verify_combination_two_responses,
     "combination:repeat_prompt": _verify_combination_repeat_prompt,
     "language:response_language": _verify_language_response_language,
