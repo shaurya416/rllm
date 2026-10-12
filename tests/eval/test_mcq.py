@@ -8,6 +8,8 @@ legacy dict-call form.
 
 from __future__ import annotations
 
+import pytest
+
 from rllm.eval.evaluator_loader import load_evaluator
 from rllm.eval.reward_fns.mcq import _extract_choice_letter
 from rllm.types import Episode, Evaluator
@@ -131,3 +133,24 @@ class TestExtractChoiceLetter:
 
     def test_answer_with_parentheses(self):
         assert _extract_choice_letter("The answer is (D)") == "D"
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("The answer is definitely B", "B"),
+            ("The answer is clearly A.", "A"),
+            ("Answer: Based on the data, the result is D", "D"),
+            ("The answer is in fact C", "C"),
+            ("The answer is: E", "E"),
+            ("answer: c.", "C"),
+        ],
+    )
+    def test_word_after_answer_is_not_read_as_a_letter(self, text, expected):
+        assert _extract_choice_letter(text) == expected
+
+    def test_word_after_answer_does_not_grade_wrong_answer_correct(self):
+        task = {"ground_truth": "D"}
+        ep = Episode(artifacts={"answer": "The answer is definitely B"})
+        result = _mcq().evaluate(task, ep)
+        assert result.is_correct is False
+        assert result.metadata["model_answer"] == "B"

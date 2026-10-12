@@ -188,6 +188,20 @@ def get_stripped_lines(val: str):
     return [val_line.strip() for val_line in val.split("\n")]
 
 
+def _as_json_data(value):
+    """Return ``value`` as plain JSON data (numpy scalars unwrapped).
+
+    Raises ``TypeError`` for anything JSON cannot represent.
+    """
+
+    def unwrap(obj):
+        if type(obj).__module__ == "numpy" and getattr(obj, "shape", None) == ():
+            return obj.item()
+        raise TypeError(f"{type(obj).__name__} is not JSON data")
+
+    return json.loads(json.dumps(value, default=unwrap))
+
+
 def grade_call_based(code: str, all_inputs: list, all_outputs: list, fn_name: str, timeout: int):
     # call-based clean up logic
     # need to wrap in try-catch logic after to catch the correct errors, but for now this is fine.
@@ -223,7 +237,12 @@ def grade_call_based(code: str, all_inputs: list, all_outputs: list, fn_name: st
             if isinstance(prediction, tuple):
                 prediction = list(prediction)
 
-            tmp_result = prediction == gt_out
+            # Compare as JSON data, like the ground truth: a returned object
+            # could otherwise define __eq__ to equal any expected output.
+            try:
+                tmp_result = _as_json_data(prediction) == gt_out
+            except (TypeError, ValueError, RecursionError):
+                tmp_result = False
 
             # handle floating point comparisons
 

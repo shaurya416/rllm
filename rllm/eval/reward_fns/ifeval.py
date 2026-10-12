@@ -139,8 +139,9 @@ def _verify_detectable_format_number_bullet_lists(response: str, num_bullets: in
 
 
 def _verify_detectable_format_number_highlighted_sections(response: str, num_highlights: int, **kwargs) -> bool:
-    h = len(re.findall(r"^\s*#{1,6}\s", response, re.MULTILINE))
-    h += len(re.findall(r"\*\*[^*]+\*\*", response))
+    # Highlights are *text* (or **text**), as the instruction asks; headings are not.
+    h = sum(1 for m in re.findall(r"\*[^\n\*]*\*", response) if m.strip("*").strip())
+    h += sum(1 for m in re.findall(r"\*\*[^\n\*]*\*\*", response) if m.removeprefix("**").removesuffix("**").strip())
     return h >= num_highlights
 
 
@@ -164,16 +165,25 @@ def _verify_detectable_format_json_format(response: str, **kwargs) -> bool:
     return False
 
 
+_CONSTRAINED_RESPONSE_OPTIONS = ("My answer is yes.", "My answer is no.", "My answer is maybe.")
+
+
 def _verify_detectable_format_constrained_response(response: str, **kwargs) -> bool:
-    return len(response.strip().lower().split()) <= 10
+    return any(option in response.strip() for option in _CONSTRAINED_RESPONSE_OPTIONS)
 
 
 def _verify_detectable_content_number_placeholders(response: str, num_placeholders: int, **kwargs) -> bool:
-    return len(re.findall(r"\[[A-Z][A-Z_ ]*\]", response)) >= num_placeholders
+    return len(re.findall(r"\[.*?\]", response)) >= num_placeholders
 
 
 def _verify_detectable_content_postscript(response: str, postscript_marker: str = "P.S.", **kwargs) -> bool:
-    return postscript_marker.lower() in response.lower() or "p.s." in response.lower()
+    if postscript_marker == "P.P.S":
+        pattern = r"\s*p\.\s?p\.\s?s.*$"
+    elif postscript_marker == "P.S.":
+        pattern = r"\s*p\.\s?s\..*$"
+    else:
+        pattern = r"\s*" + re.escape(postscript_marker.lower()) + r".*$"
+    return bool(re.findall(pattern, response.lower(), flags=re.MULTILINE))
 
 
 def _verify_change_case_english_lowercase(response: str, **kwargs) -> bool:

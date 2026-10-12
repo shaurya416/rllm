@@ -347,6 +347,50 @@ class Solution:
         output = reward(task_info, model_response)
         assert output.is_correct
 
+    @staticmethod
+    def _livecodebench_functional(model_response: str):
+        tests = [
+            {"input": "1\n2", "output": "3", "testtype": "functional", "metadata": {"func_name": "add"}},
+            {"input": "3\n4", "output": "7", "testtype": "functional", "metadata": {"func_name": "add"}},
+        ]
+        task_info = {"problem": "", "problem_type": RewardType.CODE, "data_source": "livecodebench", "ground_truth": tests}
+        return RewardCodeFn(RewardConfig())(task_info, model_response)
+
+    def test_livecodebench_object_equal_to_everything_is_not_rewarded(self):
+        model_response = """
+```python
+class Solution:
+    def add(self, a: int, b: int) -> int:
+        class AlwaysEqual:
+            def __eq__(self, other):
+                return True
+
+        return AlwaysEqual()
+```
+"""
+        output = self._livecodebench_functional(model_response)
+        assert not output.is_correct
+        assert output.reward == RewardConfig().incorrect_reward
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            "return a + b",
+            "return (a + b,)[0]",
+            "import numpy as np\n        return np.int64(a) + np.int64(b)",
+        ],
+    )
+    def test_livecodebench_plain_return_values_still_pass(self, body):
+        pytest.importorskip("numpy")
+        model_response = f"""
+```python
+class Solution:
+    def add(self, a: int, b: int) -> int:
+        {body}
+```
+"""
+        assert self._livecodebench_functional(model_response).is_correct
+
     @pytest.mark.skip(reason="LeetCode tests may have execution environment dependencies")
     def test_reward_leetcode(self):
         """

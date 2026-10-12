@@ -257,6 +257,39 @@ class TestVerifyInstruction:
         assert verify_instruction(instruction_id, failing, kwargs) is False
         assert verify_instruction(instruction_id, passing, kwargs) is True
 
+    # Checked the way the official IFEval checkers check them.
+    @pytest.mark.parametrize(
+        ("instruction_id", "failing", "passing", "kwargs"),
+        [
+            # "Answer with one of the following options: My answer is yes./no./maybe."
+            ("detectable_format:constrained_response", "Banana", "My answer is yes.", {}),
+            # A plain P.S. is not the P.P.S the instruction asks for.
+            (
+                "detectable_content:postscript",
+                "Hi.\n\nP.S. Bye.",
+                "Hi.\n\nP.P.S. Bye.",
+                {"postscript_marker": "P.P.S"},
+            ),
+            # "Highlight ... with markdown, i.e. *highlighted section*"; headings are not highlights.
+            (
+                "detectable_format:number_highlighted_sections",
+                "# Intro\n## Body\ntext",
+                "*Part one* and **part two**",
+                {"num_highlights": 2},
+            ),
+            # "placeholders represented by square brackets, such as [address]"
+            (
+                "detectable_content:number_placeholders",
+                "Meet at [ADDRESS].",
+                "Meet at [address] on [date].",
+                {"num_placeholders": 2},
+            ),
+        ],
+    )
+    def test_matches_official_checker(self, instruction_id, failing, passing, kwargs):
+        assert verify_instruction(instruction_id, failing, kwargs) is False
+        assert verify_instruction(instruction_id, passing, kwargs) is True
+
 
 # ---------------------------------------------------------------------------
 # ifeval_reward_fn (loaded via the registry adapter)
